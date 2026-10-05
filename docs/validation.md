@@ -119,5 +119,5 @@ Funded mainnet validation is a later explicit application decision.
 
 The SDK is installable independently. It provides Pacifica exchange access and
 state helpers; strategies and orchestration belong to consuming applications.
-It has not been published to a registry and
-no license/publication destination was selected on the user's behalf.
+This validation record predates registry publication. The SDK now uses the MIT
+license; see the README for the current PyPI release process.

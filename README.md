@@ -25,6 +25,14 @@ been performed. Live public checks pass on both environments; see the
 
 ## Install
 
+Install the alpha release from PyPI:
+
+```bash
+python -m pip install pacifica-python-sdk==0.1.0a1
+```
+
+For local development:
+
 ```bash
 python3.12 -m venv .venv  # any Python 3.11+ works
 source .venv/bin/activate
@@ -200,5 +208,26 @@ that the account is ready to trade.
 | [Protocol contracts](docs/api-contracts.md) | Official sources, signing and stream semantics |
 | [Validation record](docs/validation.md) | Checks performed and remaining credential-dependent work |
 
-This checkout has not been published to a package registry. A distribution
-license/publication destination remains a maintainer decision.
+## License and releases
+
+Distributed under the [MIT license](LICENSE).
+
+Releases are published through the manual **Publish to PyPI** GitHub Actions
+workflow on `main`. Only the repository owner's account can run its publishing
+job. Before the first release, register a pending GitHub Trusted Publisher in
+your PyPI account with these values:
+
+| Field | Value |
+| --- | --- |
+| PyPI project name | `pacifica-python-sdk` |
+| GitHub owner | `loinsssss` |
+| Repository | `pacifica-python-sdk` |
+| Workflow filename | `publish.yml` |
+| Environment | `pypi` |
+
+Run the workflow on `main` with the exact package version, initially `0.1.0a1`.
+It verifies the version, builds and validates the distributions, checks an
+independent wheel installation, and publishes using a short-lived credential.
+No PyPI API token needs to be stored in GitHub.
+For subsequent releases, update the package version consistently before
+running the workflow; PyPI release versions cannot be overwritten.

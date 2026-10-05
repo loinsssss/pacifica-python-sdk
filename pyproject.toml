@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,6 +7,9 @@ name = "pacifica-python-sdk"
 version = "0.1.0a1"
 description = "Independent asynchronous Pacifica REST and WebSocket client"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "loinsssss" }]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27,<1",
@@ -32,13 +35,18 @@ dev = [
     "ruff>=0.7",
 ]
 
+[project.urls]
+Repository = "https://github.com/loinsssss/pacifica-python-sdk"
+Issues = "https://github.com/loinsssss/pacifica-python-sdk/issues"
+Documentation = "https://github.com/loinsssss/pacifica-python-sdk/blob/main/docs/developer-guide.md"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/pacifica"]
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/src", "/tests", "/examples", "/scripts", "/docs",
-    "/README.md", "/pyproject.toml", "/.env.example",
+    "/README.md", "/LICENSE", "/pyproject.toml", "/.env.example",
 ]
 
 [tool.pytest.ini_options]
