@@ -426,6 +426,19 @@ class AgentList(WireModel):
     agents: tuple[dict[str, Any], ...]
 
 
+class ApiConfigKey(WireModel):
+    """A rate-limit key for the ``PF-API-KEY`` header; it carries no trading authority."""
+
+    api_key: str
+
+
+class ApiConfigKeys(WireModel):
+    """The account's active config keys (at most 5). Unknown provider fields are kept."""
+
+    active_api_keys: tuple[str, ...] = ()
+    api_key_limit: int | None = None
+
+
 class AccountSnapshot(WireModel):
     account: str
     info: AccountInfo

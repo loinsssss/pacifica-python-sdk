@@ -27,6 +27,8 @@ from .models import (
     AccountInfo,
     AccountSnapshot,
     AgentList,
+    ApiConfigKey,
+    ApiConfigKeys,
     Cancellation,
     Candle,
     CandleInterval,
@@ -607,6 +609,9 @@ class PacificaClient:
             response = await self._rest.post_reserved(path, body, context)
             # Official examples document flat acknowledgements and live APIs may wrap data.
             result = response.get("data", response)
+            if result is None:
+                # e.g. {"success": true, "data": null}: the flat acknowledgement holds it.
+                result = {k: v for k, v in response.items() if k != "data"}
             if isinstance(result, dict) and (
                 ("success" in result and result["success"] is not True)
                 or result.get("error") is not None
@@ -614,6 +619,8 @@ class PacificaClient:
                 raise UnknownOutcomeError(context)
             if model is AgentList and isinstance(result, list):
                 result = {"agents": result}
+            if model is ApiConfigKeys and isinstance(result, list):
+                result = {"active_api_keys": result}
             if model in (Cancellation, OperationResult) and isinstance(result, dict):
                 if response.get("success") is True or (
                     model is Cancellation
@@ -745,6 +752,50 @@ class PacificaClient:
         return await self._submit(
             "/agent/list", "list_agent_wallets", {}, AgentList, owner_signer=owner_signer
         )
+
+    async def create_api_config_key(self, signer: Signer | None = None) -> ApiConfigKey:
+        """Create a rate-limit config key for ``PacificaConfig.api_config_key``.
+
+        Signed by ``signer`` as the account owner, or, when omitted, by the client's
+        configured signer (an agent wallet when ``agent_wallet`` is set). The key is
+        returned only once: store it securely. Each account can hold up to 5 keys.
+
+        Pacifica answers HTTP 500 until the account has been funded (deposited into),
+        and an agent signer must be IP-whitelisted for the calling machine.
+        """
+        return await self._config_key_call(
+            "/account/api_keys/create", "create_api_key", {}, ApiConfigKey, signer
+        )
+
+    async def revoke_api_config_key(
+        self, api_key: str, signer: Signer | None = None
+    ) -> OperationResult:
+        if not isinstance(api_key, str) or not api_key or any(c.isspace() for c in api_key):
+            raise ValueError("api_key must be a nonempty key without whitespace")
+        return await self._config_key_call(
+            "/account/api_keys/revoke",
+            "revoke_api_key",
+            {"api_key": api_key},
+            OperationResult,
+            signer,
+        )
+
+    async def list_api_config_keys(self, signer: Signer | None = None) -> ApiConfigKeys:
+        return await self._config_key_call(
+            "/account/api_keys", "list_api_keys", {}, ApiConfigKeys, signer
+        )
+
+    async def _config_key_call(
+        self,
+        path: str,
+        operation: str,
+        payload: dict[str, Any],
+        model: type[M],
+        signer: Signer | None,
+    ) -> M:
+        if signer is None:
+            return await self._submit(path, operation, payload, model)
+        return await self._submit(path, operation, payload, model, owner_signer=signer)
 
     async def update_margin_mode(self, symbol: str, *, isolated: bool) -> OperationResult:
         self._credentials()
