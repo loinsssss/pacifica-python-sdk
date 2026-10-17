@@ -118,6 +118,23 @@ base-unit `amount`, optional UUID `client_order_id`, `trigger_price_type`
 (default `mark_price`; also `last_trade_price`/`mid_price`).
 `set_position_tpsl` takes the **exit order side**, e.g. ask for a long.
 
+## API config keys
+
+Rate-limit keys for `PacificaConfig.api_config_key` (sent as `PF-API-KEY`). They raise
+the REST quota (100 to 300 credits a minute by default) and carry no trading authority.
+
+| Method | Return | Upstream route |
+| --- | --- | --- |
+| `create_api_config_key(signer=None)` | `ApiConfigKey` with `.api_key` | `POST /account/api_keys/create` |
+| `list_api_config_keys(signer=None)` | `ApiConfigKeys`: `active_api_keys`, `api_key_limit` | `POST /account/api_keys` |
+| `revoke_api_config_key(api_key, signer=None)` | `OperationResult` | `POST /account/api_keys/revoke` |
+
+Pass the account owner's signer, or omit it to sign with the client's configured signer,
+which may be an agent wallet (`agent_wallet=`). Verified live: an agent signer works if
+it is IP-whitelisted for the calling machine, and creation returns HTTP 500 until the
+account has been funded. A new key is returned only once; an account holds at most 5.
+`examples/api_config_keys.py` creates, lists or revokes keys from `.env` credentials.
+
 ## Streams and local state
 
 | Method | Provider channels |
