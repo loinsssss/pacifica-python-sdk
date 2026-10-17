@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import time
 
 import pytest
 
@@ -43,3 +44,32 @@ async def test_public_streams(mainnet):
                         seen.add(event.channel)
                     if len(seen) == 4:
                         break
+
+
+@pytest.mark.parametrize("mainnet", [False, True])
+async def test_public_candles(mainnet):
+    minute = 60_000
+    async with PacificaClient(mainnet=mainnet) as client:
+        now = int(time.time() * 1000) // minute * minute
+        recent = await client.get_candles(
+            "BTC", interval="1h", start_time=now - 24 * 60 * minute, end_time=now
+        )
+        marks = await client.get_mark_price_candles(
+            "BTC", interval="1h", start_time=now - 24 * 60 * minute, end_time=now
+        )
+        assert marks
+        for candle in recent:
+            assert candle.low <= min(candle.open, candle.close)
+            assert max(candle.open, candle.close) <= candle.high
+        # Spans two requests; the boundary candle must not repeat and the end is exclusive.
+        start = now - 4_100 * minute
+        rows = [
+            row
+            async for row in client.iter_candles(
+                "BTC", interval="1m", start_time=start, end_time=now
+            )
+        ]
+        starts = [row.start_time for row in rows]
+        assert starts == sorted(set(starts))
+        assert all(start <= t < now for t in starts)
+        assert client._rest.limiter.server_budget is not None

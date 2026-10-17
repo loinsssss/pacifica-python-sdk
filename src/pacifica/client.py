@@ -7,7 +7,7 @@ import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from decimal import Decimal
-from typing import Any, Self, TypeVar
+from typing import Any, Self, TypeVar, get_args
 from uuid import UUID
 
 import httpx
@@ -28,6 +28,8 @@ from .models import (
     AccountSnapshot,
     AgentList,
     Cancellation,
+    Candle,
+    CandleInterval,
     Fill,
     FundingPayment,
     FundingRate,
@@ -59,6 +61,23 @@ from .websocket import PacificaStream
 M = TypeVar("M", bound=BaseModel)
 R = TypeVar("R")
 
+MAX_CANDLES_PER_REQUEST = 4000
+# Fixed-length intervals in milliseconds; "1M" (calendar month) has no fixed length.
+CANDLE_INTERVAL_MS: dict[str, int] = {
+    "1m": 60_000,
+    "3m": 180_000,
+    "5m": 300_000,
+    "15m": 900_000,
+    "30m": 1_800_000,
+    "1h": 3_600_000,
+    "2h": 7_200_000,
+    "4h": 14_400_000,
+    "8h": 28_800_000,
+    "12h": 43_200_000,
+    "1d": 86_400_000,
+    "1w": 604_800_000,
+}
+
 
 def parse(model: type[M], data: Any) -> M:
     try:
@@ -71,6 +90,14 @@ def parse_rows(model: type[M], data: Any) -> tuple[M, ...]:
     if not isinstance(data, list):
         raise ProtocolError("Expected an array response")
     return tuple(parse(model, row) for row in data)
+
+
+def _times(start_time: int, end_time: int | None) -> None:
+    for name, value in (("start_time", start_time), ("end_time", end_time)):
+        if value is not None and (type(value) is not int or value < 0):
+            raise ValueError(f"{name} must be a nonnegative integer of milliseconds")
+    if end_time is not None and end_time < start_time:
+        raise ValueError("end_time must not precede start_time")
 
 
 def order_identifier(order_id: int | None, client_order_id: str | UUID | None) -> dict[str, Any]:
@@ -402,6 +429,105 @@ class PacificaClient:
         return self._iterate(
             self.get_funding_rate_history, symbol=symbol, page_size=page_size, max_pages=max_pages
         )
+
+    async def get_candles(
+        self,
+        symbol: str,
+        *,
+        interval: CandleInterval,
+        start_time: int,
+        end_time: int | None = None,
+        limit: int | None = None,
+    ) -> tuple[Candle, ...]:
+        """Trade candles, oldest first. Times are Unix milliseconds.
+
+        Pacifica returns candles starting in ``[start_time, end_time]``, including one
+        that starts exactly at ``end_time``. A range may span at most ``limit``
+        intervals (default and maximum 4000), and longer ranges are rejected; use
+        ``iter_candles`` for those. Minutes without trades are omitted, and an unknown
+        symbol returns no candles rather than an error.
+        """
+        return await self._candles("/kline", symbol, interval, start_time, end_time, limit)
+
+    async def get_mark_price_candles(
+        self,
+        symbol: str,
+        *,
+        interval: CandleInterval,
+        start_time: int,
+        end_time: int | None = None,
+        limit: int | None = None,
+    ) -> tuple[Candle, ...]:
+        """Mark price candles, oldest first. Same limits as ``get_candles``."""
+        return await self._candles("/kline/mark", symbol, interval, start_time, end_time, limit)
+
+    async def iter_candles(
+        self,
+        symbol: str,
+        *,
+        interval: CandleInterval,
+        start_time: int,
+        end_time: int,
+        mark_price: bool = False,
+    ) -> AsyncIterator[Candle]:
+        """Candles starting in ``[start_time, end_time)``, over any range.
+
+        Fetched in windows of 4000 intervals. The end is exclusive, so consecutive
+        calls over adjacent ranges never return the same candle twice.
+        """
+        if interval not in CANDLE_INTERVAL_MS:
+            raise ValueError("iter_candles needs a fixed-length interval (not 1M)")
+        _times(start_time, end_time)
+        fetch = self.get_mark_price_candles if mark_price else self.get_candles
+        span = CANDLE_INTERVAL_MS[interval] * MAX_CANDLES_PER_REQUEST
+        last: int | None = None
+        chunk_start = start_time
+        while chunk_start < end_time:
+            chunk_end = min(chunk_start + span, end_time)
+            for candle in await fetch(
+                symbol, interval=interval, start_time=chunk_start, end_time=chunk_end
+            ):
+                if candle.start_time >= end_time:
+                    return
+                # Adjacent windows can both return the candle on their shared boundary.
+                if last is None or candle.start_time > last:
+                    last = candle.start_time
+                    yield candle
+            chunk_start = chunk_end
+
+    async def _candles(
+        self,
+        path: str,
+        symbol: str,
+        interval: CandleInterval,
+        start_time: int,
+        end_time: int | None,
+        limit: int | None,
+    ) -> tuple[Candle, ...]:
+        self._ensure_open()
+        validate_symbol(symbol)
+        if interval not in get_args(CandleInterval):
+            raise ValueError(f"interval must be one of {', '.join(get_args(CandleInterval))}")
+        _times(start_time, end_time)
+        cap = MAX_CANDLES_PER_REQUEST
+        if limit is not None:
+            cap = positive_int(limit, "limit", maximum=MAX_CANDLES_PER_REQUEST)
+        if end_time is not None and interval in CANDLE_INTERVAL_MS:
+            count = math.ceil((end_time - start_time) / CANDLE_INTERVAL_MS[interval])
+            if count > cap:
+                raise ValueError(
+                    f"range spans {count} {interval} candles; one request returns at most "
+                    f"{cap} (use iter_candles for longer ranges)"
+                )
+        params: dict[str, Any] = {"symbol": symbol, "interval": interval, "start_time": start_time}
+        if end_time is not None:
+            params["end_time"] = end_time
+        if limit is not None:
+            params["limit"] = limit
+        rows = parse_rows(Candle, response_data(await self._rest.get(path, params=params)))
+        if any(row.symbol != symbol or row.interval != interval for row in rows):
+            raise ProtocolError("Candles returned another symbol or interval")
+        return rows
 
     async def get_order(
         self,

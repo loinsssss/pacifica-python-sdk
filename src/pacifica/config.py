@@ -33,6 +33,8 @@ class PacificaConfig:
     max_retry_delay: float = 5.0
     expiry_window: int = 5000
     rest_credits_per_minute: int | None = 100
+    rest_credit_reserve: float = 0.2
+    pace_reads: bool = True
     subscription_timeout: float = 10.0
     heartbeat_interval: float = 20.0
     heartbeat_timeout: float = 10.0
@@ -106,6 +108,14 @@ class PacificaConfig:
             positive_int(self.rest_credits_per_minute, "rest_credits_per_minute")
             if self.rest_credits_per_minute < 12:
                 raise ValueError("credit quota must cover the conservative heavy-read cost of 12")
+        if (
+            isinstance(self.rest_credit_reserve, bool)
+            or not isinstance(self.rest_credit_reserve, (int, float))
+            or not 0 <= self.rest_credit_reserve < 1
+        ):
+            raise ValueError("rest_credit_reserve must be in [0, 1)")
+        if type(self.pace_reads) is not bool:
+            raise TypeError("pace_reads must be bool")
         if self.api_config_key is not None and (
             not self.api_config_key or any(c.isspace() for c in self.api_config_key)
         ):

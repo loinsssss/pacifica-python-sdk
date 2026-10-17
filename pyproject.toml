@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pacifica-python-sdk"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Independent asynchronous Pacifica REST and WebSocket client"
 readme = "README.md"
 license = "MIT"
@@ -14,7 +14,7 @@ requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27,<1",
     "pydantic>=2.9,<3",
-    "websockets>=15,<16",
+    "websockets>=15,<18",
     "solders>=0.21,<1",
 ]
 classifiers = [

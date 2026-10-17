@@ -55,23 +55,29 @@ class RestTransport:
             transport=transport,
             follow_redirects=False,
         )
-        self.limiter = CreditLimiter(config.rest_credits_per_minute)
+        self.limiter = CreditLimiter(
+            config.rest_credits_per_minute,
+            reserve=config.rest_credit_reserve,
+            pace_reads=config.pace_reads,
+        )
         self.closed = False
 
     async def aclose(self) -> None:
         self.closed = True
         await self._http.aclose()
 
-    async def reserve(self, cost: float) -> None:
+    async def reserve(self, cost: float, *, read: bool = False) -> None:
         if self.closed:
             raise ClientClosedError("Pacifica client is closed")
-        await self.limiter.acquire(cost)
+        await self.limiter.acquire(cost, read=read)
 
     async def get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        # Exact costs vary: budget history reads at the highest published heavy-read cost.
-        cost = (4.0 if self.config.api_config_key else 12.0) if "history" in path else 1.0
+        # Costs vary with the endpoint and result size, so budget heavy reads at the
+        # highest published cost; the server's ratelimit headers then correct the estimate.
+        heavy = "history" in path or path.lstrip("/").startswith("kline")
+        cost = (4.0 if self.config.api_config_key else 12.0) if heavy else 1.0
         for attempt in range(self.config.max_read_retries + 1):
-            await self.reserve(cost)
+            await self.reserve(cost, read=True)
             delay = min(self.config.retry_delay * 2**attempt, self.config.max_retry_delay)
             try:
                 response = await self._http.get(path.lstrip("/"), params=params)
@@ -79,12 +85,20 @@ class RestTransport:
                 if attempt == self.config.max_read_retries:
                     raise TransportError("Pacifica GET failed after bounded retries") from exc
             else:
+                self.limiter.observe(response.headers)
                 if response.status_code not in {429, 500, 502, 503, 504}:
                     return self._decode(response)
                 wait = retry_after(response)
+                if wait is None and response.status_code == 429:
+                    budget = self.limiter.server_budget
+                    wait = budget[1] if budget else None
                 if attempt == self.config.max_read_retries or (
                     wait is not None and wait > self.config.max_retry_delay
                 ):
+                    if response.status_code == 429:
+                        raise RateLimitError(
+                            retry_after=wait, request_id=response.headers.get("x-request-id")
+                        )
                     return self._decode(response)
                 delay = wait if wait is not None else delay
             await asyncio.sleep(delay)
@@ -100,6 +114,7 @@ class RestTransport:
             raise UnknownOutcomeError(context) from None
         except httpx.TransportError:
             raise UnknownOutcomeError(context) from None
+        self.limiter.observe(response.headers)
         request_id = response.headers.get("x-request-id")
         if (
             response.status_code >= 500

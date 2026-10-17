@@ -2,7 +2,7 @@
 
 An independent, standalone asynchronous Python 3.11+ wrapper for Pacifica REST
 and WebSocket APIs.
-Distribution: `pacifica-python-sdk`; import: `pacifica`. Alpha version `0.1.0a1`.
+Distribution: `pacifica-python-sdk`; import: `pacifica`. Alpha version `0.1.0a2`.
 
 Implemented:
 
@@ -28,7 +28,7 @@ been performed. Live public checks pass on both environments; see the
 Install the alpha release from PyPI:
 
 ```bash
-python -m pip install pacifica-python-sdk==0.1.0a1
+python -m pip install pacifica-python-sdk==0.1.0a2
 ```
 
 For local development:

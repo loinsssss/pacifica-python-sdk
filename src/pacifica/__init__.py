@@ -26,6 +26,8 @@ from .models import (
     BestBidOffer,
     BookLevel,
     Cancellation,
+    Candle,
+    CandleInterval,
     ConnectionEvent,
     DataEvent,
     Fill,
@@ -56,7 +58,7 @@ from .signing import LocalSigner, Signer
 from .state import ExposureTracker, LocalOrderbook, LocalPositions
 from .websocket import PacificaStream
 
-__version__ = "0.1.0a1"
+__version__ = "0.1.0a2"
 
 __all__ = [
     "load_environment",
@@ -74,6 +76,8 @@ __all__ = [
     "DataEvent",
     "Fill",
     "FundingPayment",
+    "Candle",
+    "CandleInterval",
     "FundingRate",
     "HistoryPage",
     "LocalOrderbook",

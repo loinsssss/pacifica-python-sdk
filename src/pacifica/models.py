@@ -306,6 +306,26 @@ class FundingRate(WireModel):
     created_at: ID
 
 
+CandleInterval = Literal[
+    "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d", "1w", "1M"
+]
+
+
+class Candle(WireModel):
+    """OHLCV bucket [start_time, end_time) in milliseconds. Buckets without trades are omitted."""
+
+    start_time: ID = alias("start_time", "t")
+    end_time: ID = alias("end_time", "T")
+    symbol: str = alias("symbol", "s")
+    interval: CandleInterval = alias("interval", "i")
+    open: Positive = alias("open", "o")
+    high: Positive = alias("high", "h")
+    low: Positive = alias("low", "l")
+    close: Positive = alias("close", "c")
+    volume: Nonnegative = alias("volume", "v")
+    trades: ID = alias("trades", "n")
+
+
 class HistoryPage(WireModel, Generic[T]):
     data: tuple[T, ...]
     next_cursor: str | None = None
