@@ -1,0 +1,31 @@
+name: SDK checks
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+      - run: python -m pytest
+      - run: python -m build
+      - name: Check built wheel outside the checkout
+        shell: bash
+        run: |
+          python -m venv /tmp/pacifica-consumer
+          /tmp/pacifica-consumer/bin/python -m pip install dist/*.whl
+          mkdir -p /tmp/pacifica-consumer-smoke
+          cp tests/consumer_smoke.py /tmp/pacifica-consumer-smoke/
+          cd /tmp
+          /tmp/pacifica-consumer/bin/python -I /tmp/pacifica-consumer-smoke/consumer_smoke.py
