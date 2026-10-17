@@ -50,7 +50,9 @@ explicit arguments.
 | `max_read_retries` | `2` | Additional attempts for transient GET failures |
 | `retry_delay`, `max_retry_delay` | `0.25`, `5` | Exponential retry delay, seconds |
 | `expiry_window` | `5000` | Signature validity, milliseconds |
-| `rest_credits_per_minute` | `100` | Local rolling 60-second credit budget; `None` disables pacing |
+| `rest_credits_per_minute` | `100` | Local rolling 60-second estimate until the server reports a budget; `None` disables it |
+| `rest_credit_reserve` | `0.2` | Share of the server quota that reads never spend, kept for orders and cancels |
+| `pace_reads` | `True` | Spread the remaining read budget evenly over the rest of the window |
 | `subscription_timeout` | `10` | Connection/subscription establishment timeout |
 | `heartbeat_interval`, `heartbeat_timeout` | `20`, `10` | JSON ping cadence and pong deadline |
 | `max_reconnect_attempts` | `3` | Consecutive reconnect attempts before terminal failure |
@@ -59,13 +61,24 @@ explicit arguments.
 | `websocket_max_size` | `8388608` | Maximum incoming message bytes |
 | `max_pending_messages` | `128` | Data buffered while awaiting subscription acknowledgements |
 
-Standard GETs consume one local credit. History GETs conservatively consume
-12 without a config key, or 4 with one; cancellations consume 0.5 and other
-mutations one. The local budget defaults to 100 even with a config key; set it
-to your verified quota if you need more. Coordinate other clients/processes
-sharing the same IP/account quota in the consuming application.
+Every REST response carries Pacifica's own budget in the `ratelimit` and
+`ratelimit-policy` headers (remaining credits, seconds until refresh, quota).
+Once a response has reported it, that budget is authoritative: it includes
+credits spent by other clients or processes sharing the IP or account, and the
+real quota for the caller's tier, which replaces the local estimate. Reads wait
+rather than spend the last `rest_credit_reserve` of the quota, so orders and
+cancellations keep headroom during long history downloads, and with
+`pace_reads` the remaining read budget is spread over the window instead of
+spent in a burst. Mutations never wait for pacing; they may use the reserve.
+`client._rest.limiter.server_budget` exposes the last reported budget.
+
+Before the first report, and after a window refreshes until the next response,
+the local estimate applies: standard GETs count one credit; history and candle
+GETs conservatively count 12 without a config key, or 4 with one (actual cost
+grows with the result size); cancellations count 0.5 and other mutations one.
 Reservations occur before signing to avoid waiting on a quota with an expiring
-signature. HTTP `Retry-After` is honored within the configured delay budget.
+signature. HTTP `Retry-After` is honored within the configured delay budget; a
+rate-limited read without it reports the budget's refresh time as `retry_after`.
 
 ## Account reads and signing
 

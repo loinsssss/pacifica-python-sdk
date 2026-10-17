@@ -30,12 +30,26 @@ missing files and conflicting `PACIFICA_MAINNET` values raise errors.
 | `get_recent_trades(symbol=None)` | `tuple[Trade, ...]` | `GET /trades` |
 | `get_funding_rate_history(symbol, limit=200, cursor=None)` | `HistoryPage[FundingRate]` | `GET /funding_rate/history` |
 | `iter_funding_rate_history(symbol, page_size=200, max_pages=100)` | `AsyncIterator[FundingRate]` | Cursor traversal |
+| `get_candles(symbol, interval=..., start_time=..., end_time=None, limit=None)` | `tuple[Candle, ...]` | `GET /kline` |
+| `get_mark_price_candles(symbol, interval=..., start_time=..., end_time=None, limit=None)` | `tuple[Candle, ...]` | `GET /kline/mark` |
+| `iter_candles(symbol, interval=..., start_time=..., end_time=..., mark_price=False)` | `AsyncIterator[Candle]` | Windows of 4000 intervals |
 
 `agg_level` is one of `1, 10, 100, 1000, 10000`.
 `Orderbook.bids`/`.asks` hold `BookLevel(price, amount, order_count)`.
 `Price` exposes `mark`, `mid`, `oracle`, `funding`, `next_funding`,
 `open_interest`, `timestamp` and optional daily statistics.
 `yesterday_price=-1` is preserved when supplied by testnet.
+
+Candle times are Unix milliseconds and `interval` is one of `1m`, `3m`, `5m`,
+`15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1M`. `Candle` exposes
+`start_time`, `end_time`, `symbol`, `interval`, `open`, `high`, `low`, `close`,
+`volume` and `trades`, oldest first; intervals without trades are omitted.
+`get_candles` returns candles starting in `[start_time, end_time]`, inclusive of
+one starting exactly at `end_time`. One request may span at most `limit`
+intervals (default and maximum 4000); a longer range raises `ValueError` before
+any request. `iter_candles` covers any range in `[start_time, end_time)`, end
+exclusive, so adjacent ranges never repeat a candle; it needs a fixed-length
+interval, not `1M`. An unknown symbol returns no candles rather than an error.
 
 ## Account data
 
